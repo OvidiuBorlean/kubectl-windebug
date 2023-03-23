@@ -1,0 +1,95 @@
+#!/bin/bash
+
+if [ "$#" -lt 2 ];
+then
+  echo "Windows Nodes Logs collector"
+  echo "Usage: kubectl winlogs nodeName"
+  echo "kubectl-winlogs akswin0001"
+
+fi
+nodeName="$1"
+
+#Checking for existence of SAS Key as environment variable in SAS
+if [[ -z "${SAS}" ]]; then
+  echo "Storage Account Signature not found in environment variable. Please add the required value in SAS, eg. 'SAS=yourKey'"
+  nodeName="$1"
+  #capTime="$3"
+  #SAS_key="$3"
+  exit
+else
+cat << EOF > ./winlogs.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: windows-debug-17263
+  name: windows-debug-17263
+  namespace: default
+spec:
+  nodeName: $1
+  containers:
+  - image: ghcr.io/jsturtevant/windows-debug:v1.0.0
+    imagePullPolicy: Always
+    name: windows-debug-17263
+    resources: {}
+    volumeMounts:
+    - mountPath: /tmp
+      name: logs
+    command:
+      - powershell 
+      - Write-Output "---> Download azcopy binary"
+      - Invoke-WebRequest -UseBasicParsing https://aka.ms/downloadazcopy-v10-windows -OutFile C:\k\debug\azcopy.zip;
+      - Write-Output "---> Unzip the archive";
+      - Expand-Archive c:\k\debug\azcopy.zip -DestinationPath C:\k\debug;
+      - Write-Output "---> Executing Logs collector script";
+      - C:\k\debug\collect-windows-logs.ps1;     
+      - cd C:\k\debug\azcopy*;
+      - rm C:\k\debug\azcopy.zip;
+      - Write-Output "---> Uploading results to Storage Account";
+      - ./azcopy.exe copy "C:\k\debug\*.zip" "$SAS";
+      - sleep 60;
+  volumes:
+  - name: logs
+    hostPath:
+      path: /tmp
+      type: Directory
+  dnsPolicy: ClusterFirst
+  hostNetwork: true
+  nodeSelector:
+    kubernetes.io/os: windows
+  restartPolicy: Never
+  securityContext:
+    windowsOptions:
+      hostProcess: true
+      runAsUserName: NT AUTHORITY\SYSTEM
+status: {}
+EOF
+if [[ "$2" == "--netcap" ]]
+then
+  echo "Adding Network Capture"
+  sed -i '31 i  \     \ - Write-Output "Starting Network Capture";' winlogs.yaml
+  sed -i '32 i  \     \ - C:\\k\\debug\\startpacketcapture.ps1 -NoPrompt;' winlogs.yaml
+  sed -i '33 i  \     \ - Write-Output "Stoping Network Capture;' winlogs.yaml
+  sed -i '34 i  \     \ - Stop-NetEventSession HnsPacketCapture;' winlogs.yaml
+  sed -i '35 i  \     \ - Write-Output "Upload Network Capture";' winlogs.yaml
+  sed -i '36 i  \     \ - ./azcopy.exe copy "C:\\*.etl" $SAS;' winlogs.yaml  
+fi
+echo "Running the Pod"
+#kubectl apply -f ./winlogs.yaml
+echo "You can extract locally the logs with the followin command: "
+echo "kubectl cp default/windows-debug-17263:/k/debug/yourLogsFile.zip ./localFileName"
+echo "Done. Cleaning up..."
+#while true
+#do
+#  kubectl get pod windows-debug-17263 | grep Completed > /dev/null
+#  if [ $? !=  0 ]
+#  then
+#     echo "Still working"
+#     sleep 15
+#  else
+#     kubectl delete pod windows-debug-17263
+#     rm ./winlogs 
+#  fi
+#done
+fi
