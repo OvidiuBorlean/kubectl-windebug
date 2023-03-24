@@ -38,7 +38,7 @@ spec:
       name: logs
     command:
       - powershell 
-      - Write-Output "---> Download azcopy binary"
+      - Write-Output "---> Download azcopy binary";
       - Invoke-WebRequest -UseBasicParsing https://aka.ms/downloadazcopy-v10-windows -OutFile C:\k\debug\azcopy.zip;
       - Write-Output "---> Unzip the archive";
       - Expand-Archive c:\k\debug\azcopy.zip -DestinationPath C:\k\debug;
@@ -48,7 +48,7 @@ spec:
       - rm C:\k\debug\azcopy.zip;
       - Write-Output "---> Uploading results to Storage Account";
       - ./azcopy.exe copy "C:\k\debug\*.zip" "$SAS";
-      - sleep 60;
+      - sleep 660;
   volumes:
   - name: logs
     hostPath:
@@ -70,26 +70,25 @@ then
   echo "Adding Network Capture"
   sed -i '31 i  \     \ - Write-Output "Starting Network Capture";' winlogs.yaml
   sed -i '32 i  \     \ - C:\\k\\debug\\startpacketcapture.ps1 -NoPrompt;' winlogs.yaml
-  sed -i '33 i  \     \ - Write-Output "Stoping Network Capture;' winlogs.yaml
+  sed -i '33 i  \     \ - Write-Output "Stoping Network Capture";' winlogs.yaml
   sed -i '34 i  \     \ - Stop-NetEventSession HnsPacketCapture;' winlogs.yaml
   sed -i '35 i  \     \ - Write-Output "Upload Network Capture";' winlogs.yaml
-  sed -i '36 i  \     \ - ./azcopy.exe copy "C:\\*.etl" $SAS;' winlogs.yaml  
 fi
 echo "Running the Pod"
-#kubectl apply -f ./winlogs.yaml
+kubectl apply -f ./winlogs.yaml
 echo "You can extract locally the logs with the followin command: "
 echo "kubectl cp default/windows-debug-17263:/k/debug/yourLogsFile.zip ./localFileName"
 echo "Done. Cleaning up..."
-#while true
-#do
-#  kubectl get pod windows-debug-17263 | grep Completed > /dev/null
-#  if [ $? !=  0 ]
-#  then
-#     echo "Still working"
-#     sleep 15
-#  else
-#     kubectl delete pod windows-debug-17263
-#     rm ./winlogs 
-#  fi
-#done
+while true
+do
+  kubectl get pod windows-debug-17263 | grep Completed > /dev/null
+  if [ $? !=  0 ]
+  then
+     echo "Still working..."
+     sleep 30
+  else
+     kubectl delete pod windows-debug-17263
+     rm ./winlogs 
+  fi
+done
 fi
