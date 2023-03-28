@@ -26,4 +26,4 @@ chmod +x ./kubectl-windebug
 ```
 
 First parameter should be the Windows Node where this Pod should be scheduled. By default, it will only gather logs from the Node level and upload to Storage Account. 
-You can choose to also get the network traces you neet to add the flag --netpcap
+You can choose to also get the network traces you neet to add the flag --netcap
